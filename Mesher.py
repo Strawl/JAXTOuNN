@@ -10,7 +10,12 @@ class RectangularGridMesher:
     self.ndim = ndim;
     self.nelx = nelx;
     self.nely = nely;
-    self.elemSize = elemSize;
+    # Config "elemSize" is historical: it denotes elements per unit length.
+    # Internally, elemSize is the physical size of one finite element.
+    self.elemDensity = np.asarray(elemSize, dtype=float);
+    if np.any(self.elemDensity <= 0.):
+      raise ValueError('elemSize entries must be positive')
+    self.elemSize = 1./self.elemDensity;
     self.bcSettings = bcSettings;
     self.numElems = self.nelx*self.nely;
     self.elemArea = self.elemSize[0]*self.elemSize[1]*\
@@ -101,8 +106,8 @@ class RectangularGridMesher:
     ctr = 0
     for i in range(res*self.nelx):
       for j in range(res*self.nely):
-        xy[ctr, 0] = (i + 0.5)/(res*self.elemSize[0])
-        xy[ctr, 1] = (j + 0.5)/(res*self.elemSize[1])
+        xy[ctr, 0] = (i + 0.5)*self.elemSize[0]/res
+        xy[ctr, 1] = (j + 0.5)*self.elemSize[1]/res
         ctr += 1
     return xy
   #--------------------------#

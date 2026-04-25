@@ -21,6 +21,16 @@ def applyFourierMap(xy, fourierMap):
     xy = jnp.concatenate((c, s), axis = 1)
   return xy
 
+#-----------------#
+def scaleSymmetryMap(symMap, mesh):
+  scaledSymMap = {
+    axis: settings.copy()
+    for axis, settings in symMap.items()
+  }
+  scaledSymMap['YAxis']['midPt'] *= mesh.elemSize[0]
+  scaledSymMap['XAxis']['midPt'] *= mesh.elemSize[1]
+  return scaledSymMap
+
 #-------DENSITY PROJECTION-----------#
 
 def applyDensityProjection(x, densityProj):

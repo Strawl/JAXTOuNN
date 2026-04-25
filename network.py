@@ -1,11 +1,12 @@
 import numpy as np
 
 import jax.nn as nn
+from jax.nn import initializers
 from jax import jit, random
 np.random.seed(0)
 
 rand_key = random.PRNGKey(0) # reproducibility
-from jax.experimental import stax
+from jax.example_libraries import stax
 
 def elementwise(fun, **fun_kwargs):
     """Layer that applies a scalar function elementwise on its inputs."""
@@ -13,6 +14,7 @@ def elementwise(fun, **fun_kwargs):
     apply_fun = lambda params, inputs, **kwargs: fun(inputs, **fun_kwargs)
     return init_fun, apply_fun
 Swish = elementwise(nn.swish)
+LeakyRelu = elementwise(nn.leaky_relu)
 
 class TopNet:
   def __init__(self, nnSettings):
@@ -23,13 +25,20 @@ class TopNet:
     
   def makeNetwork(self, nnSettings):
     # JAX network definition
+    activationName = nnSettings.get('activation', 'swish').lower()
+    activation = LeakyRelu if activationName in ('leaky_relu', 'leakyrelu') else Swish
+    useBatchNorm = nnSettings.get('useBatchNorm', False)
+    weightInit = initializers.glorot_normal()
+    biasInit = initializers.zeros
     layers = []
     for i in range(nnSettings['numLayers']-1):
-      layers.append(stax.Dense(nnSettings['numNeuronsPerLayer']))
-      layers.append(Swish)#(stax.LeakyRelu)
-    layers.append(stax.Dense(nnSettings['outputDim']))
+      layers.append(stax.Dense(nnSettings['numNeuronsPerLayer'], W_init=weightInit, b_init=biasInit))
+      if(useBatchNorm):
+        layers.append(stax.BatchNorm(axis=(0,)))
+      layers.append(activation)
+    layers.append(stax.Dense(nnSettings['outputDim'], W_init=weightInit, b_init=biasInit))
     layers.append(stax.Sigmoid)
     return stax.serial(*layers)
   
   def forward(self, wts, x):
-    return self.fwdNN(wts, x)
+    return 0.01 + self.fwdNN(wts, x)
