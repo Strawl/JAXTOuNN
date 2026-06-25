@@ -128,3 +128,18 @@ class RectangularGridMesher:
     plt.title(titleStr)
     plt.pause(0.01)
     self.fig.canvas.draw()
+
+  def saveFieldSnapshot(self, field, titleStr, epoch):
+    import os
+    os.makedirs('snapshots', exist_ok=True)
+    plt.figure()
+    # Material (density=1) -> black, void (density=0) -> white
+    plt.imshow(1.0 - np.flipud(field.reshape((self.nelx,self.nely)).T), \
+               cmap='gray', interpolation='none', vmin=0.0, vmax=1.0)
+    plt.axis('Equal')
+    plt.grid(False)
+    plt.title(titleStr)
+    fname = 'snapshots/epoch_{:04d}.png'.format(epoch)
+    plt.savefig(fname, dpi=150, bbox_inches='tight')
+    plt.close()
+    print('Saved snapshot: {:s}'.format(fname))

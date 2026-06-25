@@ -46,7 +46,7 @@ class JAXSolver:
   def _youngs_modulus(self, density, penal):
     return self.material.matProp['Emin'] + \
           (self.material.matProp['Emax']-self.material.matProp['Emin'])*\
-            (density+0.001)**penal
+            density**penal
   #-----------------------#
   def _assemble_free_csr_values(self, Y):
     sK = jnp.einsum('e,jk->ejk', Y, self.D0).flatten()
@@ -84,7 +84,7 @@ class JAXSolver:
       elem_u = u[self._edof_mat]
       dJ_dY = -jnp.einsum('ei,ij,ej->e', elem_u, self.D0, elem_u)
       dY_ddensity = (self.material.matProp['Emax']-self.material.matProp['Emin'])*\
-            penal*(density+0.001)**(penal-1.)
+            penal*density**(penal-1.)
       return (g*dJ_dY*dY_ddensity, jnp.zeros_like(penal))
 
     objective.defvjp(objective_fwd, objective_bwd)

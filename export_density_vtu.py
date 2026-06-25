@@ -3,6 +3,7 @@ import configparser
 from pathlib import Path
 
 import jax.numpy as jnp
+import matplotlib.pyplot as plt
 import numpy as np
 
 from examples import getExampleBC
@@ -186,6 +187,25 @@ def write_vtu(path, mesh, res, density):
         f.write("</VTKFile>\n")
 
 
+def write_density_png(path, mesh, res, density):
+    """Save density field as a grayscale PNG image."""
+    nx = mesh.nelx * res
+    ny = mesh.nely * res
+    # density is stored x-fastest, so reshape accordingly
+    density_img = density.reshape((nx, ny), order="C")
+    # flip vertically so y=0 is at the bottom (matches mesh/plot conventions)
+    density_img = np.flipud(density_img.T)
+    # normalize to 0-1 for grayscale if not already (density should be 0-1)
+    density_img = np.clip(density_img, 0.0, 1.0)
+    # Material (density=1) -> black, void (density=0) -> white
+    density_img = 1.0 - density_img
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    plt.imsave(str(path), density_img, cmap="gray", vmin=0.0, vmax=1.0)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Train TOuNN from config.txt and export a dense density VTU."
@@ -199,7 +219,7 @@ def main():
         raise ValueError("--res must be >= 1")
 
     tounn, opt_params = build_problem(args.config)
-    tounn.optimizeDesign(opt_params)
+    convgHistory = tounn.optimizeDesign(opt_params)
 
     xy = dense_cell_centers(tounn.FE.mesh, args.res)
     density = evaluate_density(tounn, xy)
@@ -217,6 +237,7 @@ def main():
         "density min/mean/max: "
         f"{density.min():.6g} / {density.mean():.6g} / {density.max():.6g}"
     )
+    print("Final compliance: {:.6g}".format(convgHistory['J'][-1]))
 
 
 if __name__ == "__main__":

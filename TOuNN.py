@@ -42,11 +42,12 @@ class TOuNN:
     return applyDensityProjection(density, self.densityProjection)
   #-----------------------#
   
-  def optimizeDesign(self, optParams):
+  def optimizeDesign(self, optParams, disableDisplay=False):
     convgHistory = {'epoch':[], 'vf':[], 'J':[]}
     xy = self.preprocessCoordinates(self.xy)
 
-    penal = optParams['penal']['p0']
+    # Original hardcoded defaults were: penal=1.0, pMax=8.0, delP=0.02
+    penal = optParams.get('penal', {}).get('p0', 1.0)
     # optimizer
     opt_init, opt_update, get_params = optimizers.adam(optParams['learningRate'])
     opt_state = opt_init(self.topNet.wts)
@@ -54,14 +55,13 @@ class TOuNN:
     self.trainedWts = get_params(opt_state)
     
     # fwd once to get J0-scaling param
-    density0 = self.computeDensity(get_params(opt_state), xy)
+    density0 = self.topNet.forward(get_params(opt_state), xy).reshape(-1)
     J0 = self.FE.objectiveHandle(density0, penal)
   
     def computeLoss(objective, constraints):
       if(optParams['lossMethod']['type'] == 'penalty'):
-        alpha = min(optParams['lossMethod']['alphaMax'], \
-                optParams['lossMethod']['alpha0'] + \
-                epoch*optParams['lossMethod']['delAlpha']) # penalty method
+        alpha = optParams['lossMethod']['alpha0'] + \
+                epoch*optParams['lossMethod']['delAlpha'] # penalty method
         loss = objective
         for c in constraints:
           loss += alpha*c**2
@@ -79,33 +79,37 @@ class TOuNN:
         
     # closure function
     def closure(nnwts):
-      density = self.computeDensity(nnwts, xy)
+      density = self.topNet.forward(nnwts, xy).reshape(-1)
       volCons = (jnp.mean(density)/optParams['desiredVolumeFraction'])- 1.
       J = self.FE.objectiveHandle(density, penal)
       return computeLoss(J/J0, [volCons])
     
     # optimization loop
     for epoch in range(optParams['maxEpochs']):
-      penal = min(optParams['penal']['pMax'], \
-                  optParams['penal']['p0'] + epoch*optParams['penal']['delP'])
+      # Original hardcoded: min(8.0, 1. + epoch*0.02)
+      pMax = optParams.get('penal', {}).get('pMax', 8.0)
+      delP = optParams.get('penal', {}).get('delP', 0.02)
+      penal = min(pMax, optParams.get('penal', {}).get('p0', 1.0) + epoch*delP)
       grads = jax.grad(closure)(get_params(opt_state))
       if(optParams['gradclip']['isOn']):
         grads = optimizers.clip_grads(grads, optParams['gradclip']['thresh'])
       opt_state = opt_update(epoch, grads, opt_state)
       self.trainedWts = get_params(opt_state)
   
-      if(epoch%10 == 0):
-        convgHistory['epoch'].append(epoch)
-        density = self.computeDensity(get_params(opt_state), xy)
+      convgHistory['epoch'].append(epoch)
+      density = self.topNet.forward(get_params(opt_state), xy).reshape(-1)
 
-        J = self.FE.objectiveHandle(density, penal)
-        convgHistory['J'].append(J)
-        volf= jnp.mean(density)
-        convgHistory['vf'].append(volf)
-        if(epoch == 10):
-          J0 = J;
-        status = 'epoch {:d}, J {:.2E}, vf {:.2F}'.format(epoch, J/J0, volf);
-        print(status)
+      J = self.FE.objectiveHandle(density, penal)
+      convgHistory['J'].append(J)
+      volf= jnp.mean(density)
+      convgHistory['vf'].append(volf)
+      if(epoch == 10):
+        J0 = J;
+      status = 'epoch {:d}, J {:.2E}, vf {:.2F}'.format(epoch, J/J0, volf);
+      print(status)
+      if not disableDisplay:
         if(epoch%30 == 0):
           self.FE.mesh.plotFieldOnMesh(density, status)
+      else:
+          self.FE.mesh.saveFieldSnapshot(density, status, epoch)
     return convgHistory
